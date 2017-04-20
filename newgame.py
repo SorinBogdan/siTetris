@@ -25,15 +25,14 @@ import random, time, sys, socket, os
 
 # If Pi = False the script runs in simulation mode using pygame lib
 PI = True
+DEBUG = False
 
-SIZE=20;
-FPS = 15
 BOARDWIDTH = 8
 BOARDHEIGHT = 16
 BLANK = '.'
 MOVESIDEWAYSFREQ = 0.15
 MOVEDOWNFREQ = 0.15
-FALLING_SPEED = 0.8
+FALLING_SPEED = 0.4
 
 
 SCORES =(0,40,100,300,1200)
@@ -205,22 +204,21 @@ def main():
         #show_message(device, msg, fill="white", font=proportional(CP437_FONT))
         with canvas(device) as draw:
             draw.point( (0,0),1)
-        time.sleep(2)
+        time.sleep(1)
         #clearScreen()
         #drawSymbols()
         initButtons()
+        
         runTetrisGame()
     terminate()
 
 # gaming main routines #
 def runTetrisGame():
-    # setup varia
-    # bles for the start of the game
-    #if PI:
-        #device.brightness(1)
-        #device.flush()
     board = getBlankBoard()
-    print(board)
+    #for i in range (BOARDWIDTH):
+    #        board[BOARDHEIGHT-1][i]=1
+    #        board[BOARDHEIGHT-2][i]=1
+    #print(board)
     lastMoveDownTime = time.time()
     lastMoveSidewaysTime = time.time()
     lastFallTime = time.time()
@@ -244,13 +242,13 @@ def runTetrisGame():
         #    print(myQueue.get().type)
 
         if fallingPiece == None:
-            print("a picat una")
             # No falling piece in play, so start a new piece at the top
             fallingPiece = nextPiece
             nextPiece = getNewPiece()
             lastFallTime = time.time() # reset lastFallTime
 
             if not isValidPosition(board, fallingPiece):
+                print(fallingPiece)
                 time.sleep(2)
                 return # can't fit a new piece on the board, so game over
 
@@ -272,9 +270,9 @@ def runTetrisGame():
                 
 # handle moving the piece because of user input
         if (movingLeft or movingRight) and time.time() - lastMoveSidewaysTime > MOVESIDEWAYSFREQ:
-            if movingLeft and isValidPosition(board, fallingPiece, adjX=-1):
+            if movingLeft and isValidPosition(board, fallingPiece, adjX=1):
                 fallingPiece['y'] += 1
-            elif movingRight and isValidPosition(board, fallingPiece, adjX=1):
+            elif movingRight and isValidPosition(board, fallingPiece, adjX=-1):
                 fallingPiece['y'] -= 1
             lastMoveSidewaysTime = time.time()
             movingLeft=False
@@ -283,7 +281,7 @@ def runTetrisGame():
         # let the piece fall if it is time to fall
         if time.time() - lastFallTime > fallFreq:
             # see if the piece has landed
-            if not isValidPosition(board, fallingPiece, adjX=1):
+            if not isValidPosition(board, fallingPiece, adjY=1):
                 # falling piece has landed, set it on the board
                 addToBoard(board, fallingPiece)
                 print("added to board")
@@ -304,7 +302,7 @@ def runTetrisGame():
 
         if fallingPiece != None:
             drawPiece(fallingPiece)
-        time.sleep(.05)
+        #time.sleep(.05)
 
 
 # buttons logic #
@@ -400,38 +398,39 @@ def getNewPiece():
                 'rotation': random.randint(0, len(PIECES[shape]) - 1),
                 'y': int(BOARDWIDTH / 2) - int(TEMPLATEWIDTH / 2),
                 'x': -2, # start it above the board (i.e. less than 0)
-                'color': PIECES_ORDER.get(shape)}
+                'color': 1}
     return newPiece
 
 def addToBoard(board, piece):
     # fill in the board based on piece's location, shape, and rotation
-    for x in range(TEMPLATEWIDTH):
-        for y in range(TEMPLATEHEIGHT):
-            if PIECES[piece['shape']][piece['rotation']][y][x] != BLANK:
-                board[x + piece['x']][y + piece['y']] = piece['color']
+    for x in range(TEMPLATEHEIGHT):
+        for y in range(TEMPLATEWIDTH):
+            if PIECES[piece['shape']][piece['rotation']][x][y] != BLANK:
+                board[(TEMPLATEHEIGHT-1-x) + piece['x']][(TEMPLATEWIDTH-1-y) + piece['y']] = piece['color']
 
 def isOnBoard(x, y):
-    return x >= 0 and x < BOARDWIDTH and y < BOARDHEIGHT
+    return x >= 0 and x < BOARDWIDTH and y < BOARDHEIGHT and y>=0
 
 def isValidPosition(board, piece, adjX=0, adjY=0):
     # Return True if the piece is within the board and not colliding
     #pdb.set_trace()
-    for x in range(TEMPLATEWIDTH):
-        for y in range(TEMPLATEHEIGHT):
-            isAboveBoard = y + piece['x'] + adjY < 0
-            #print '  ({0},{1}), px {2}, py {3}'.format(x,y,piece['x'],piece['y'])
-            if isAboveBoard or PIECES[piece['shape']][piece['rotation']][y][x] == BLANK:
+    for x in range(TEMPLATEHEIGHT):
+        for y in range(TEMPLATEWIDTH):
+            isAboveBoard = (TEMPLATEHEIGHT-1-x) + piece['x'] + adjY < 0
+            
+            if isAboveBoard or PIECES[piece['shape']][piece['rotation']][x][y] == BLANK:
                 continue
-            if not isOnBoard(x + piece['y'] + adjY, y + piece['x'] + adjX):
+            if not isOnBoard((TEMPLATEWIDTH-1-y) + piece['y'] + adjX, (TEMPLATEHEIGHT-1-x) + piece['x'] + adjY):
+                print("is not on board")
                 return False
-            if board[x + piece['x'] + adjX][y + piece['y'] + adjY] != BLANK:
+            if board[(TEMPLATEHEIGHT-1-x) + piece['x'] + adjY][(TEMPLATEWIDTH-1-y) + piece['y'] + adjX] != BLANK:
+                print("is not blank")
                 return False
     return True
 
 def isCompleteLine(board, y):
     # Return True if the line filled with boxes with no gaps.
     for x in range(BOARDWIDTH):
-        print(y,x)
         if board[y][x] == BLANK:
             return False
     return True
@@ -444,11 +443,11 @@ def removeCompleteLines(board):
         if isCompleteLine(board, y):
             # Remove the line and pull boxes down by one line.
             for pullDownY in range(y, 0, -1):
-                for x in range(BOARDHEIGHT):
-                    board[x][pullDownY] = board[x][pullDownY-1]
+                for x in range(BOARDWIDTH):
+                    board[pullDownY][x] = board[pullDownY-1][x]
             # Set very top line to blank.
-            for x in range(BOARDHEIGHT):
-                board[x][0] = BLANK
+            for x in range(BOARDWIDTH):
+                board[0][x] = BLANK
             numLinesRemoved += 1
             # Note on the next iteration of the loop, y is the same.
             # This is so that if the line that was pulled down is also
@@ -481,10 +480,10 @@ def drawPiece(piece, pixelx=None, pixely=None):
     #print(pixelx,pixely)
     # draw each of the boxes that make up the piece
     with canvas(device) as draw:
-        for x in range(TEMPLATEWIDTH):
-            for y in range(TEMPLATEHEIGHT):
-                if shapeToDraw[y][x] != BLANK:
-                    draw.point( (pixelx+ x , pixely+y),piece['color'])
+        for x in range(TEMPLATEHEIGHT):
+            for y in range(TEMPLATEWIDTH):
+                if shapeToDraw[x][y] != BLANK:
+                    draw.point( (pixelx+(TEMPLATEHEIGHT-1-x),pixely+(TEMPLATEWIDTH-1-y)), piece['color'])
 
 if __name__ == '__main__':
     main()
