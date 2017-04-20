@@ -19,6 +19,8 @@ from luma.core.virtual import viewport
 from luma.core.legacy import text, show_message
 from luma.core.legacy.font import proportional, CP437_FONT, TINY_FONT, SINCLAIR_FONT, LCD_FONT
 
+import RPi.GPIO as GPIO
+
 import random, time, sys, socket, os
 
 # If Pi = False the script runs in simulation mode using pygame lib
@@ -206,6 +208,7 @@ def main():
         time.sleep(2)
         #clearScreen()
         #drawSymbols()
+        initButtons()
         runTetrisGame()
     terminate()
 
@@ -251,73 +254,31 @@ def runTetrisGame():
                 time.sleep(2)
                 return # can't fit a new piece on the board, so game over
 
-#         while not myQueue.empty():
-#             event = myQueue.get()
-#             if event.type == QKEYUP:
-#                 if (event.key == 7):
-# 
-#                     lastFallTime = time.time()
-#                     lastMoveDownTime = time.time()
-#                     lastMoveSidewaysTime = time.time()
-#                 elif (event.key == 0):
-#                     movingLeft = False
-#                 elif (event.key == 1):
-#                     movingRight = False
-#                 elif (event.key == 3):
-#                     movingDown = False
-# 
-#             elif event.type == QKEYDOWN:
-#                 # moving the piece sideways
-#                 if (event.key == 0) and isValidPosition(board, fallingPiece, adjX=-1):
-#                     fallingPiece['y'] -= 1
-#                     movingLeft = True
-#                     movingRight = False
-#                     lastMoveSidewaysTime = time.time()
-# 
-#                 elif (event.key == 1) and isValidPosition(board, fallingPiece, adjX=1):
-#                     fallingPiece['y'] += 1
-#                     movingRight = True
-#                     movingLeft = False
-#                     lastMoveSidewaysTime = time.time()
-# 
-#                 # rotating the piece (if there is room to rotate)
-#                 elif (event.key == 2):
-#                     fallingPiece['rotation'] = (fallingPiece['rotation'] + 1) % len(PIECES[fallingPiece['shape']])
-#                     if not isValidPosition(board, fallingPiece):
-#                         fallingPiece['rotation'] = (fallingPiece['rotation'] - 1) % len(PIECES[fallingPiece['shape']])
-#                 elif (event.key == 5): # rotate the other direction
-#                     fallingPiece['rotation'] = (fallingPiece['rotation'] - 1) % len(PIECES[fallingPiece['shape']])
-#                     if not isValidPosition(board, fallingPiece):
-#                         fallingPiece['rotation'] = (fallingPiece['rotation'] + 1) % len(PIECES[fallingPiece['shape']])
-# 
-#                 # making the piece fall faster with the down key
-#                 elif (event.key == 3):
-#                     movingDown = True
-#                     if isValidPosition(board, fallingPiece, adjY=1):
-#                         fallingPiece['x'] += 1
-#                     lastMoveDownTime = time.time()
-# 
-#                 # move the current piece all the way down
-#                 elif event.key == 4:
-#                     movingDown = False
-#                     movingLeft = False
-#                     movingRight = False
-#                     for i in range(1, BOARDHEIGHT):
-#                         if not isValidPosition(board, fallingPiece, adjY=i):
-#                             break
-#                     score+=i #TODO: more digits on numbercounter, more scores
-#                     fallingPiece['x'] += i - 1
-# #         # handle moving the piece because of user input
-#         if (movingLeft or movingRight) and time.time() - lastMoveSidewaysTime > MOVESIDEWAYSFREQ:
-#             if movingLeft and isValidPosition(board, fallingPiece, adjX=-1):
-#                 fallingPiece['y'] -= 1
-#             elif movingRight and isValidPosition(board, fallingPiece, adjX=1):
-#                 fallingPiece['y'] += 1
-#             lastMoveSidewaysTime = time.time()
-# 
-#         if movingDown and time.time() - lastMoveDownTime > MOVEDOWNFREQ and isValidPosition(board, fallingPiece, adjY=1):
-#             fallingPiece['x'] += 1
-#             lastMoveDownTime = time.time()
+        pressedButton = getPressedButton() 
+        if (pressedButton==BTN_LEFT and isValidPosition(board, fallingPiece, adjX=1) and not movingLeft):
+            #fallingPiece['y'] += 1
+            movingLeft = True
+            movingRight = False
+            lastMoveSidewaysTime = time.time()
+        elif (pressedButton==BTN_RIGHT and isValidPosition(board, fallingPiece, adjX=-1) and not movingRight):
+            #fallingPiece['y'] -= 1
+            movingRight = True
+            movingLeft = False
+            lastMoveSidewaysTime = time.time()
+        elif (pressedButton==BTN_ROTATE):
+            fallingPiece['rotation'] = (fallingPiece['rotation'] + 1) % len(PIECES[fallingPiece['shape']])
+            if not isValidPosition(board, fallingPiece):
+                fallingPiece['rotation'] = (fallingPiece['rotation'] - 1) % len(PIECES[fallingPiece['shape']])
+                
+# handle moving the piece because of user input
+        if (movingLeft or movingRight) and time.time() - lastMoveSidewaysTime > MOVESIDEWAYSFREQ:
+            if movingLeft and isValidPosition(board, fallingPiece, adjX=-1):
+                fallingPiece['y'] += 1
+            elif movingRight and isValidPosition(board, fallingPiece, adjX=1):
+                fallingPiece['y'] -= 1
+            lastMoveSidewaysTime = time.time()
+            movingLeft=False
+            movingRight=False
 
         # let the piece fall if it is time to fall
         if time.time() - lastFallTime > fallFreq:
@@ -338,29 +299,37 @@ def runTetrisGame():
                 # piece did not land, just move the piece down
                 fallingPiece['x'] += 1
                 lastFallTime = time.time()
-
-        # drawing everything on the screen
-        #clearScreen()
+                
         drawBoard(board)
-        #scoreText(score)
-        #if score>oldscore:
-            #scoreTetris(score,level,PIECES_ORDER.get(nextPiece['shape']))
-            #oldscore = score
-        #if oldpiece!=PIECES_ORDER.get(nextPiece['shape']):
-            #scoreTetris(score,level,PIECES_ORDER.get(nextPiece['shape']))
-            #oldpiece=PIECES_ORDER.get(nextPiece['shape'])
-        #drawStatus(score, level)
-        #drawNextPiece(nextPiece)
+
         if fallingPiece != None:
             drawPiece(fallingPiece)
-
-        #updateScreen()
-        #FPSCLOCK.tick(FPS)
         time.sleep(.05)
 
+
+# buttons logic #
+BTN_LEFT    = 26
+BTN_RIGHT   = 13
+BTN_ROTATE  = 19
+BTN_NOBUTTON= 0
+
+def initButtons():
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(BTN_LEFT,GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.setup(BTN_RIGHT,GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.setup(BTN_ROTATE,GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+def getPressedButton():
+    if GPIO.input(BTN_LEFT)==False:
+        return BTN_LEFT
+    elif GPIO.input(BTN_RIGHT)==False:
+        return BTN_RIGHT
+    elif GPIO.input(BTN_ROTATE)==False:
+        return BTN_ROTATE
+    else:
+        return BTN_NOBUTTON
+
 # drawing #
-
-
 def scrollText(text):
     if PI:
         device.show_message(text, font=proportional(CP437_FONT))
